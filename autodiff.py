@@ -150,6 +150,25 @@ class MulOp(Op):
         """TODO: Your code here"""
         return [output_grad * node.inputs[1], output_grad * node.inputs[0]]
 
+class InvOp(Op):
+    """Op to element-wise inverse."""
+    def __call__(self, node_A):
+        new_node = Op.__call__(self)
+        new_node.inputs = [node_A]
+        new_node.name = "(1/%s)" % (node_A.name)
+        return new_node
+
+    def compute(self, node, input_vals):
+        """Given values of two input nodes, return result of element-wise multiplication."""
+        assert len(input_vals) == 1
+        assert isinstance(input_vals[0], np.ndarray)
+        return 1 / input_vals[0].astype(np.float)
+
+    def gradient(self, node, output_grad):
+        """Given gradient of multiply node, return gradient contributions to each input."""
+        """TODO: Your code here"""
+        return [output_grad * self(-1*node*node)]
+
 class MulByConstOp(Op):
     """Op to element-wise multiply a nodes by a constant."""
     def __call__(self, node_A, const_val):
@@ -263,15 +282,134 @@ class OnesLikeOp(Op):
     def gradient(self, node, output_grad):
         return [zeroslike_op(node.inputs[0])]
 
+class DiaglikeOp(Op):
+    """Op that represents np.diag."""
+    def __call__(self, node):
+        """Creates a node that represents a np.ones array of same shape as node_A."""
+        new_node = Op.__call__(self)
+        new_node.inputs = [node]
+        new_node.name = "Diaglike(%s)" % node.name
+        return new_node
+
+    def compute(self, node, input_vals):
+        """Returns ones_like of the same shape as input."""
+        assert(isinstance(input_vals[0], np.ndarray))
+        return np.diag(np.sum(input_vals[0], axis=0))
+
+    def gradient(self, node, output_grad):
+        raise NotImplementedError
+
+class SoftmaxOp(Op):
+    """Op to softmax."""
+    def __call__(self, node):
+        """Create a new node that is the result softmax of the input node.
+
+        Parameters
+        ----------
+        node: input node
+
+        Returns
+        -------
+        Returns a node that is the result softmax of the input node.
+        """
+        new_node = Op.__call__(self)
+        new_node.inputs = [node]
+        new_node.name = "Softmax(%s)" % node.name
+        return new_node
+
+    def compute(self, node, input_vals):
+        """Given value of input node, return result of softmax."""
+        """TODO: Your code here"""
+        assert len(input_vals) == 1
+        x = input_vals[0]
+        x -= np.max(x, axis=1, keepdims=True)
+        x = np.exp(x)
+        x /= np.sum(x, axis=1, keepdims=True)
+        return x
+
+    def gradient(self, node, output_grad):
+        """Given gradient of softmax node, return gradient contributions to input.
+        """
+        """TODO: Your code here"""
+        return [matmul_op(output_grad, diaglike_op(node) + (-1 * matmul_op(node, node, True, False)))]
+
+class LogOp(Op):
+    """Op to log."""
+    def __call__(self, node):
+        """Create a new node that is the result log of the input node.
+
+        Parameters
+        ----------
+        node: input node
+
+        Returns
+        -------
+        Returns a node that is the result softmax of the input node.
+        """
+        new_node = Op.__call__(self)
+        new_node.inputs = [node]
+        new_node.name = "Log(%s)" % node.name
+        return new_node
+
+    def compute(self, node, input_vals):
+        """Given value of input node, return result of log."""
+        """TODO: Your code here"""
+        assert len(input_vals) == 1
+        assert isinstance(input_vals[0], np.ndarray)
+        return np.log(input_vals[0])
+
+    def gradient(self, node, output_grad):
+        """Given gradient of softmax node, return gradient contributions to input.
+        """
+        """TODO: Your code here"""
+        return [output_grad * inv_op(node.inputs[0])]
+
+class ReduceSumOp(Op):
+    """Op to numpy like sum."""
+    def __call__(self, node, axis=None):
+        """Create a new node that is the result sum of the input node.
+
+        Parameters
+        ----------
+        node: input node
+
+        Returns
+        -------
+        Returns a node that is the result sum of the input node.
+        """
+        new_node = Op.__call__(self)
+        new_node.inputs = [node]
+        new_node.axis = axis
+        new_node.name = "Sum(%s, axis=%s)" % (node.name, axis)
+        return new_node
+
+    def compute(self, node, input_vals):
+        """Given value of input node, return result of log."""
+        """TODO: Your code here"""
+        assert len(input_vals) == 1
+        assert isinstance(input_vals[0], np.ndarray)
+        return np.sum(input_vals[0], axis=node.axis, keepdims=True)
+
+    def gradient(self, node, output_grad):
+        """Given gradient of softmax node, return gradient contributions to input.
+        """
+        """TODO: Your code here"""
+        return [output_grad * oneslike_op(node.inputs[0])]
+
 # Create global singletons of operators.
 add_op = AddOp()
 mul_op = MulOp()
+inv_op = InvOp()
 add_byconst_op = AddByConstOp()
 mul_byconst_op = MulByConstOp()
 matmul_op = MatMulOp()
 placeholder_op = PlaceholderOp()
 oneslike_op = OnesLikeOp()
 zeroslike_op = ZerosLikeOp()
+softmax_op = SoftmaxOp()
+diaglike_op = DiaglikeOp()
+log_op = LogOp()
+sum_op = ReduceSumOp()
 
 class Executor:
     """Executor computes values for a given subset of nodes in a computation graph.""" 
@@ -352,7 +490,7 @@ def gradients(output_node, node_list):
     return grad_node_list
 
 ##############################
-####### Helper Methods ####### 
+####### Helper Methods #######
 ##############################
 
 def find_topo_sort(node_list):
