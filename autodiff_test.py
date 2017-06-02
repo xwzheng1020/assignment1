@@ -189,3 +189,39 @@ def test_matmul_two_vars():
     assert np.array_equal(y_val, expected_yval)
     assert np.array_equal(grad_x2_val, expected_grad_x2_val)
     assert np.array_equal(grad_x3_val, expected_grad_x3_val)
+
+if __name__ == '__main__':
+    # x1 = ad.Variable(name='x1')
+    # x2 = ad.Variable(name='x2')
+    # y = x1 * x2 + (-1 * x1)
+    # grad_x1, grad_x2 = ad.gradients(y, [x1, x2])
+    # executor = ad.Executor([y, grad_x1])
+    # y_val, grad_x1_val = executor.run(feed_dict={x1 : np.array([1.2]), x2 : np.array([1.5])})
+    # print y_val, grad_x1_val
+    # test_matmul_two_vars()
+    x1 = ad.Variable(name='x1')
+    W = ad.Variable(name='W')
+
+    yt = ad.Variable(name='yt')
+    y = ad.log_op(ad.softmax_op(ad.matmul_op(x1, W)))
+    cross_entropy = ad.sum_op(-1 * ad.sum_op(yt * y, axis=1))
+
+    [grad_W] = ad.gradients(cross_entropy, [W])
+    executor = ad.Executor([cross_entropy, grad_W])
+    x1_val = np.array([[0, 0.51], [0.5, 0], [0.2, 0.8]])
+    yt_val = np.array([[0, 1], [1, 0], [0, 1]])
+    np.random.seed(0)
+    W_val = np.random.randn(2, 2)
+    # W_val = np.eye(2, 2)
+    lr = 10
+    # [y_val, grad_W_val] = executor.run(feed_dict={x1:x1_val, W: W_val, yt: yt_val})
+    # print y_val
+    # print grad_W_val
+    for i in range(100):
+        [cross_entropy_val, grad_W_val] = executor.run(feed_dict={x1 : x1_val, W : W_val, yt: yt_val})
+        print cross_entropy_val
+        # print y_val
+        # print grad_W_val
+        W_val -= lr * grad_W_val
+        # print W_val
+    print W_val
